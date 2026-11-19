@@ -10,21 +10,100 @@
 
 **OzPrint** is a self-hosted, open-source web platform that unifies opaque document storage, interactive PDF.js previewing, granular page slicing (`range`, `odd/even`, `reverse` manual duplexing), multi-page-per-sheet (**N-Up**) layout conversion, non-destructive Fabric.js markup, isolated rasterized true redaction, format conversions (`PDF ↔ Images`), and physical print orchestration inside a single deployable modular monolith.
 
+![OzPrint Workspace, Interactive PDF Preview & Granular Page Slicer](docs/screenshots/01-workspace-page-slicer.png)
+
 ---
 
 ## Table of Contents
 
-1. [Deployment Topologies: Direct Server vs. Remote Agent](#1-deployment-topologies-direct-server-vs-remote-agent)
-2. [System Architecture](#2-system-architecture)
-3. [Feature Overview (Three-Layer Architecture)](#3-feature-overview-three-layer-architecture)
-4. [Quick Start (Docker & Bare-Metal Linux)](#4-quick-start-docker--bare-metal-linux)
-5. [Local Development & Automated Test Suite](#5-local-development--automated-test-suite)
-6. [Configuration Reference (`.env`)](#6-configuration-reference-env)
-7. [Documentation & Open-Source Guides](#7-documentation--open-source-guides)
+1. [Visual Usage Tutorial & Step-by-Step Guide](#1-visual-usage-tutorial--step-by-step-guide)
+2. [Deployment Topologies: Direct Server vs. Remote Agent](#2-deployment-topologies-direct-server-vs-remote-agent)
+3. [System Architecture](#3-system-architecture)
+4. [Feature Overview (Three-Layer Architecture)](#4-feature-overview-three-layer-architecture)
+5. [Quick Start (Docker & Bare-Metal Linux)](#5-quick-start-docker--bare-metal-linux)
+6. [Local Development & Automated Test Suite](#6-local-development--automated-test-suite)
+7. [Configuration Reference (`.env`)](#7-configuration-reference-env)
+8. [Documentation & Open-Source Guides](#8-documentation--open-source-guides)
 
 ---
 
-## 1. Deployment Topologies: Direct Server vs. Remote Agent
+## 1. Visual Usage Tutorial & Step-by-Step Guide
+
+### Step 1: Upload Documents, Preview Pages & Slice for Printing
+
+![Workspace, PDF Preview & Granular Page Slicer](docs/screenshots/01-workspace-page-slicer.png)
+
+1. **Upload PDFs or Images**:
+   - In the left **Document Library** panel, click **Upload PDF / Images**.
+   - Select a `.pdf` file—or select **multiple PNG/JPG images at once** to automatically compile them into a standardized multi-page PDF.
+   - Organize documents into **Folders**, search by filename, or click the **Trash (`Delete`)** icon next to any stored PDF to permanently delete it from disk and the database.
+2. **Interactive PDF Preview, Markup & True Redaction (Center Panel)**:
+   - Navigate pages (`<` / `>`), adjust zoom (`60%–180%`), or click **Export PNG ZIP** / **Export JPG ZIP** to download high-DPI page images.
+   - Use **Text Box**, **Freehand Sign**, **Stamp** (`APPROVED`, `CONFIDENTIAL`, `DRAFT`, `PAID`), or **Visual Mask (White Box)** and click **Save Annotated Revision** to flatten annotations via `pdf-lib` into a new non-destructive revision (`v2`, `v3`...) without mutating your original upload.
+   - Use **True Redaction (Strip & Rasterize)** and click **Burn True Redaction** to permanently destroy underlying vector/text data on sensitive pages by rasterizing them at 300 DPI.
+3. **Granular Page Slicing & Manual Duplexing (Right Panel — `Slice & Print`)**:
+   - Choose your **Target CUPS / Remote Printer**.
+   - Enter **Custom Page Ranges** (e.g., `1-3, 5, 8-10`), select a **Page Subset Filter** (`All`, `Odd`, or `Even`), and toggle **Print Order** (`Normal 1 → N` vs. `Reverse N → 1` for face-up manual duplexing).
+   - Check the **Live Physical Sheet Counter** to see the exact spool sequence and physical sheets required before clicking **Slice & Print**.
+
+---
+
+### Step 2: Convert PDFs to Multiple Pages Per Sheet (N-Up Layout)
+
+![Multiple Pages Per Sheet (N-Up PDF Layout)](docs/screenshots/02-multi-page-per-sheet-nup.png)
+
+Need to print lecture slides, question banks, or handouts with **2, 4, 6, 8, 9, or 16 pages on a single physical sheet**?
+
+1. In the right panel, switch to the **Multi-Page Per Sheet** tab.
+2. **PDF Page Layout**:
+   - Select `2`, `4`, `6`, `8`, `9`, or `16 pages per sheet`.
+   - Toggle **`with border`** to draw a crisp frame around each sub-page cell. The live diagram on the right updates immediately to preview how pages `1, 2, 3, 4...` will be positioned.
+3. **Reading Direction**:
+   - Choose `Row by row` or `Column by column`, and `Left to right` or `Right to left`.
+4. **Page Layout & Margins**:
+   - Pick the output paper size (`A4`, `A3`, `A5`, `Letter`, `Legal`) and orientation (`Automatic orientation (Standard)`, `Portrait`, or `Landscape`).
+   - Adjust **Outer margin** (`Top`, `Left`, `Right`, `Bottom` in `mm`) and **Inner margin** (spacing between sub-pages in `mm`, default `5 mm`).
+5. **Convert & Print**:
+   - Set your **Filename after conversion** (e.g., `Q bank - converted.pdf`) and click **Convert to N Pages/Sheet**.
+   - The newly generated N-Up PDF is saved to your Document Library and loaded into the previewer immediately, ready to print.
+
+---
+
+### Step 3: Monitor Live CUPS Jobs & Resolve `UNKNOWN` Halts Safely
+
+![Live Print Queue & UNKNOWN Communication Halt Guardrail](docs/screenshots/04-print-queue-and-unknown-guard.png)
+
+1. Open the **Live Print Queue** tab from the top navigation bar.
+2. Every job transitions through `UPLOADED → VALIDATED → QUEUED → PROCESSING → COMPLETED` as OzPrint polls CUPS (`lpstat -W completed -o`) every 2 seconds.
+3. **`UNKNOWN` Safety Guardrail (Zero Duplicate Prints)**:
+   - If the CUPS daemon or a Remote Print Agent loses connectivity mid-job, OzPrint transitions the job to `UNKNOWN` and **halts auto-retry** so your printer never wastes paper printing duplicates.
+   - Check the physical printer tray and click **Printed OK** (marks completed and cleans up temp slices), **Re-Spool** (explicitly re-queues the job once), or **Cancel** (cancels and refunds your page quota).
+
+---
+
+### Step 4: Personal Walk-Up QR Print Kiosk
+
+![Personal Walk-Up QR Print Kiosk](docs/screenshots/03-walkup-qr-kiosk.png)
+
+1. Open the **Walk-Up QR Kiosk** tab (also accessible directly from the login screen without signing in as an admin).
+2. Scan the QR code with any smartphone on your LAN or Tailscale network to open an ephemeral guest session.
+3. Tap **Select PDF, PNG, or JPEG**, choose your page range, odd/even filter, and copies, and tap **Print Now & Auto-Purge File**.
+4. As soon as CUPS confirms physical completion (or if you tap **Erase File Now**), OzPrint permanently unlinks both the uploaded source file and the temporary print slice from disk.
+
+---
+
+### Step 5: Admin Dashboard — Discover CUPS Printers, Manage Quotas & Audit Logs
+
+![Admin Dashboard: CUPS Printers, Agents, Quotas & Immutable Audit Logs](docs/screenshots/05-admin-printers-and-audit.png)
+
+1. Open the **Admin, CUPS & Agents** tab (visible to `ADMIN` users).
+2. **Printer Discovery**: Click **Scan CUPS (`lpstat`)** to automatically detect attached USB/network printers and parse their hardware capabilities (`lpoptions`).
+3. **Remote Print Agents**: If you have a printer on a separate remote network behind NAT, enter a name and click **Enroll Agent** to generate a one-time `AGENT_ENROLLMENT_TOKEN`.
+4. **User Quotas & Immutable Audit Trail**: Create `MEMBER` accounts with monthly physical sheet quotas, reset used quotas with one click, and inspect the SQLite trigger-protected **Immutable Audit Trail**.
+
+---
+
+## 2. Deployment Topologies: Direct Server vs. Remote Agent
 
 OzPrint supports two ways to talk to physical printers through its pluggable `IPrintAdapter` layer:
 
@@ -46,7 +125,7 @@ If OzPrint is hosted on a **Cloud VPS** (outside your local network) or in **Off
 
 ---
 
-## 2. System Architecture
+## 3. System Architecture
 
 ```mermaid
 flowchart TD
@@ -92,7 +171,7 @@ flowchart TD
 
 ---
 
-## 3. Feature Overview (Three-Layer Architecture)
+## 4. Feature Overview (Three-Layer Architecture)
 
 ### Layer 1 — Core Printing Engine
 - **Opaque UUIDv4 Storage & Magic-Byte Validation**: Verifies file headers (`%PDF-`, `PNG`, `JPEG`) via raw magic-byte inspection, computes SHA-256 checksums, stores files under non-guessable keys (`objects/YYYY/MM/<uuid>.pdf`), and supports 1-click permanent deletion from disk and database.
@@ -124,7 +203,7 @@ flowchart TD
 
 ---
 
-## 4. Quick Start (Docker & Bare-Metal Linux)
+## 5. Quick Start (Docker & Bare-Metal Linux)
 
 ### Option A: Official Docker Compose (Recommended)
 
@@ -154,7 +233,7 @@ This script provisions a least-privilege `ozprint` system account in the `lp` gr
 
 ---
 
-## 5. Local Development & Automated Test Suite
+## 6. Local Development & Automated Test Suite
 
 ### Prerequisites
 - **Node.js** 20 LTS or newer (`npm` 10+)
@@ -186,7 +265,7 @@ npm run dev:web
 
 ---
 
-## 6. Configuration Reference (`.env`)
+## 7. Configuration Reference (`.env`)
 
 Copy [`.env.example`](.env.example) to `.env` to customize your instance:
 
@@ -208,7 +287,7 @@ Copy [`.env.example`](.env.example) to `.env` to customize your instance:
 
 ---
 
-## 7. Documentation & Open-Source Guides
+## 8. Documentation & Open-Source Guides
 
 - **[AGENTS.md](AGENTS.md)** — Complete guide to Remote Print Agents (how they work, when to use them vs. direct server printing) + AI Coding Agent repository rules.
 - **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** — Architecture deep-dive, database schema, N-Up layout math, state machine internals, and testing guide.
