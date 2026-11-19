@@ -8,6 +8,7 @@ import {
   Plus,
   Activity,
   KeyRound,
+  Trash2,
 } from 'lucide-react';
 import { api, PrinterItem } from '../api/client';
 
@@ -59,9 +60,17 @@ export const AdminDashboard: React.FC<Props> = ({
       await api.request('/printers/discover', { method: 'POST' });
       onRefreshPrinters();
       loadAdminData();
+    } catch {
+      onRefreshPrinters();
     } finally {
       setDiscovering(false);
     }
+  };
+
+  const handleDeletePrinter = async (printerId: string) => {
+    await api.request(`/printers/${printerId}`, { method: 'DELETE' });
+    onRefreshPrinters();
+    loadAdminData();
   };
 
   const handleEnrollAgent = async (e: React.FormEvent) => {
@@ -173,25 +182,42 @@ export const AdminDashboard: React.FC<Props> = ({
           </div>
 
           <div className="space-y-2">
-            {printers.map((p) => (
-              <div
-                key={p.id}
-                className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
-              >
-                <div>
-                  <div className="font-semibold text-white">
-                    {p.displayName}
+            {printers.length === 0 ? (
+              <p className="text-xs text-slate-500 py-3">
+                No printers registered yet. Click &ldquo;Scan CUPS (lpstat)&rdquo; on your
+                Linux print server to detect attached printers.
+              </p>
+            ) : (
+              printers.map((p) => (
+                <div
+                  key={p.id}
+                  className="p-3 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-xs"
+                >
+                  <div>
+                    <div className="font-semibold text-white">
+                      {p.displayName}
+                    </div>
+                    <div className="text-slate-400">
+                      <code>{p.systemName}</code> • {p.adapterType} • Media:{' '}
+                      {(p.capabilities?.media || ['A4']).join(', ')}
+                    </div>
                   </div>
-                  <div className="text-slate-400">
-                    <code>{p.systemName}</code> • {p.adapterType} • Media:{' '}
-                    {(p.capabilities?.media || ['A4']).join(', ')}
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-medium">
+                      {p.operationalState}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePrinter(p.id)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition"
+                      title={`Remove "${p.displayName}"`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
-                <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-medium">
-                  {p.operationalState}
-                </span>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
 

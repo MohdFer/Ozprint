@@ -115,6 +115,27 @@ export class PrintOrchestrator {
 
   async discoverLocalPrinters(actorUserId?: string): Promise<any[]> {
     const discovered = await this.localAdapter.discoverPrinters();
+    const discoveredNames = new Set(discovered.map((d) => d.systemName));
+
+    // Remove stale LOCAL_CUPS printers that are not present in real lpstat output
+    const existingLocal = this.db
+      .prepare<any>(
+        "SELECT id, system_name FROM printers WHERE adapter_type = 'LOCAL_CUPS'"
+      )
+      .all();
+    for (const row of existingLocal) {
+      if (!discoveredNames.has(row.system_name)) {
+        try {
+          this.db.prepare('DELETE FROM printers WHERE id = ?').run(row.id);
+        } catch {
+          // If referenced by historical print_jobs, disable it so it no longer appears
+          this.db
+            .prepare('UPDATE printers SET is_enabled = 0 WHERE id = ?')
+            .run(row.id);
+        }
+      }
+    }
+
     this.upsertDiscoveredPrinters(discovered);
     this.audit.log({
       actorUserId,
@@ -122,7 +143,23 @@ export class PrintOrchestrator {
       targetType: 'PRINTER',
       details: { count: discovered.length },
     });
-    return this.listPrinters(false);
+    return this.listPrinters(true);
+  }
+
+  deletePrinter(printerId: string, actorUserId?: string): void {
+    try {
+      this.db.prepare('DELETE FROM printers WHERE id = ?').run(printerId);
+    } catch {
+      this.db
+        .prepare('UPDATE printers SET is_enabled = 0 WHERE id = ?')
+        .run(printerId);
+    }
+    this.audit.log({
+      actorUserId,
+      action: 'PRINTER_DELETED',
+      targetType: 'PRINTER',
+      targetId: printerId,
+    });
   }
 
   upsertDiscoveredPrinters(discovered: DiscoveredPrinter[]): void {

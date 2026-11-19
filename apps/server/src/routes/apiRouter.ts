@@ -342,11 +342,20 @@ export function createApiRouter(deps: ApiRouterDeps): Router {
   // 4. PRINTERS & REMOTE AGENTS
   // =========================================================================
 
-  router.get('/printers', requireAuth, (req: Request, res: Response) => {
-    const showAll = req.user!.role === 'ADMIN' && req.query.all === 'true';
-    const printers = orchestrator.listPrinters(!showAll);
+  router.get('/printers', requireAuth, (_req: Request, res: Response) => {
+    const printers = orchestrator.listPrinters(true);
     return res.json({ printers });
   });
+
+  router.delete(
+    '/printers/:printerId',
+    requireAuth,
+    requireRole(['ADMIN']),
+    (req: Request, res: Response) => {
+      orchestrator.deletePrinter(req.params.printerId, req.user!.id);
+      return res.json({ ok: true, printers: orchestrator.listPrinters(true) });
+    }
+  );
 
   router.post(
     '/printers/discover',

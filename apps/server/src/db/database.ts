@@ -124,6 +124,17 @@ export function initializeDatabase(config: AppConfig): IDatabase {
   db.exec(COMMON_SCHEMA_DDL);
   db.exec(SQLITE_IMMUTABILITY_TRIGGERS);
 
+  // Purge any leftover simulated printer rows from older database volumes
+  try {
+    db.prepare(
+      "DELETE FROM printers WHERE display_name LIKE '%(Local CUPS)%'"
+    ).run();
+  } catch {
+    db.prepare(
+      "UPDATE printers SET is_enabled = 0 WHERE display_name LIKE '%(Local CUPS)%'"
+    ).run();
+  }
+
   // Seed default Admin account if none exists
   const existingAdmin = db
     .prepare<{ id: string }>('SELECT id FROM users WHERE username = ?')
