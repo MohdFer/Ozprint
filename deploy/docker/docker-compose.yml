@@ -1,0 +1,41 @@
+services:
+  ozprint:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: ozprint-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-4000}:4000"
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - JWT_SECRET=${JWT_SECRET:-ozprint-production-jwt-secret-change-me-1234567890}
+      - DB_DRIVER=${DB_DRIVER:-sqlite}
+      - SQLITE_PATH=/var/lib/ozprint/ozprint.db
+      - STORAGE_ROOT=/var/lib/ozprint
+      - DEFAULT_ADMIN_USERNAME=${DEFAULT_ADMIN_USERNAME:-admin}
+      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL:-admin@ozprint.local}
+      - DEFAULT_ADMIN_PASSWORD=${DEFAULT_ADMIN_PASSWORD:-ozprint-admin}
+      - DEFAULT_MONTHLY_QUOTA=${DEFAULT_MONTHLY_QUOTA:-500}
+    volumes:
+      - ozprint_data:/var/lib/ozprint
+      # Optional: Mount host CUPS socket on Linux hosts for zero-config local USB/network printing
+      # - /var/run/cups/cups.sock:/var/run/cups/cups.sock
+
+  # Optional PostgreSQL service (enable with: docker compose --profile postgres up -d)
+  postgres:
+    image: postgres:16-alpine
+    container_name: ozprint-postgres
+    profiles: ["postgres"]
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=ozprint
+      - POSTGRES_PASSWORD=ozprint
+      - POSTGRES_DB=ozprint
+    volumes:
+      - ozprint_pgdata:/var/lib/postgresql/data
+
+volumes:
+  ozprint_data:
+  ozprint_pgdata:
