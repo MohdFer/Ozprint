@@ -1,0 +1,31 @@
+{
+  "name": "ozprint",
+  "version": "3.0.0",
+  "private": true,
+  "description": "OzPrint — Open-Source Self-Hosted Document Management & Print Orchestration Platform",
+  "license": "MIT",
+  "workspaces": [
+    "apps/server",
+    "apps/web",
+    "apps/agent"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev:server": "npm --workspace=apps/server run dev",
+    "dev:web": "npm --workspace=apps/web run dev",
+    "dev:agent": "npm --workspace=apps/agent run dev",
+    "start": "npm --workspace=apps/server run start",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:security": "vitest run tests/security",
+    "test:integration": "vitest run tests/integration"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
