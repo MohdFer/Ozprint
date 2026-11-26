@@ -13,8 +13,13 @@ import {
   Trash2,
   Image as ImageIcon,
   History,
+  ExternalLink,
 } from 'lucide-react';
 import { api, DocumentItem, safeRandomUUID } from '../api/client';
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.js?url';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 interface OverlayItem {
   id: string;
@@ -43,7 +48,12 @@ export const PdfPreviewAndMarkup: React.FC<Props> = ({
   onRevisionCreated,
 }) => {
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [zoom, setZoom] = useState<number>(1);
+  const [zoom, setZoom] = useState<number>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      return 0.6;
+    }
+    return 1;
+  });
   const [activeTool, setActiveTool] = useState<
     'none' | 'text' | 'stamp' | 'mask' | 'redact' | 'signature'
   >('none');
@@ -56,17 +66,25 @@ export const PdfPreviewAndMarkup: React.FC<Props> = ({
   >([]);
   const [saving, setSaving] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+
+  const [pdfDoc, setPdfDoc] = useState<any>(null);
+  const [pageAspectRatio, setPageAspectRatio] = useState<number>(1.414);
+  const [loadingPdf, setLoadingPdf] = useState<boolean>(true);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const renderTaskRef = useRef<any>(null);
 
+  // Load PDF Binary and parse with PDF.js
   useEffect(() => {
     setCurrentPage(1);
     setOverlays([]);
     setFeedback(null);
+    setPdfError(null);
+    setLoadingPdf(true);
 
-    let revoked = false;
-    let objectUrl: string | null = null;
+    let cancelled = false;
 
     async function loadPdfBinary() {
       try {
@@ -77,29 +95,125 @@ export const PdfPreviewAndMarkup: React.FC<Props> = ({
           headers,
           credentials: 'include',
         });
-        if (!res.ok) return;
-        const blob = await res.blob();
-        if (!revoked) {
-          objectUrl = URL.createObjectURL(blob);
-          setPdfBlobUrl(objectUrl);
+        if (!res.ok) {
+          throw new Error(`Failed to load document (${res.status})`);
         }
-      } catch {
-        // Ignore
+        const arrayBuffer = await res.arrayBuffer();
+        if (cancelled) return;
+
+        const loadingTask = pdfjsLib.getDocument({
+          data: new Uint8Array(arrayBuffer),
+        });
+        const loadedDoc = await loadingTask.promise;
+        if (!cancelled) {
+          setPdfDoc(loadedDoc);
+          setLoadingPdf(false);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setPdfError(err?.message || 'Failed to render PDF');
+          setLoadingPdf(false);
+        }
       }
     }
 
     loadPdfBinary();
     return () => {
-      revoked = true;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      cancelled = true;
     };
   }, [document.id]);
 
-  const getNormalizedCoords = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Render current page onto Canvas using PDF.js
+  useEffect(() => {
+    if (!pdfDoc) return;
+
+    let isCurrent = true;
+
+    async function renderPage() {
+      try {
+        if (renderTaskRef.current) {
+          try {
+            renderTaskRef.current.cancel();
+          } catch {
+            // ignore cancel error
+          }
+        }
+
+        const page = await pdfDoc.getPage(currentPage);
+        if (!isCurrent) return;
+
+        const unscaledViewport = page.getViewport({ scale: 1.0 });
+        const ratio = unscaledViewport.height / unscaledViewport.width;
+        setPageAspectRatio(ratio);
+
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const baseWidth = 560;
+        const displayWidth = Math.round(baseWidth * zoom);
+        const displayHeight = Math.round(displayWidth * ratio);
+
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.round(displayWidth * dpr);
+        canvas.height = Math.round(displayHeight * dpr);
+        canvas.style.width = `${displayWidth}px`;
+        canvas.style.height = `${displayHeight}px`;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const scale = (displayWidth / unscaledViewport.width) * dpr;
+        const viewport = page.getViewport({ scale });
+
+        const task = page.render({
+          canvasContext: ctx,
+          viewport,
+        });
+        renderTaskRef.current = task;
+
+        await task.promise;
+      } catch (err: any) {
+        if (err?.name !== 'RenderingCancelledException') {
+          console.error('PDF render error:', err);
+        }
+      }
+    }
+
+    renderPage();
+
+    return () => {
+      isCurrent = false;
+      if (renderTaskRef.current) {
+        try {
+          renderTaskRef.current.cancel();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, [pdfDoc, currentPage, zoom]);
+
+  const getNormalizedCoords = (
+    e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>
+  ) => {
     const rect = canvasContainerRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0.2, y: 0.2 };
-    const x = Math.max(0.02, Math.min(0.92, (e.clientX - rect.left) / rect.width));
-    const y = Math.max(0.02, Math.min(0.92, (e.clientY - rect.top) / rect.height));
+    let clientX: number;
+    let clientY: number;
+    if ('touches' in e && e.touches.length > 0) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else if ('changedTouches' in e && e.changedTouches.length > 0) {
+      clientX = e.changedTouches[0].clientX;
+      clientY = e.changedTouches[0].clientY;
+    } else if ('clientX' in e) {
+      clientX = (e as React.MouseEvent).clientX;
+      clientY = (e as React.MouseEvent).clientY;
+    } else {
+      return { x: 0.2, y: 0.2 };
+    }
+    const x = Math.max(0.02, Math.min(0.92, (clientX - rect.left) / rect.width));
+    const y = Math.max(0.02, Math.min(0.92, (clientY - rect.top) / rect.height));
     return { x, y };
   };
 
@@ -163,6 +277,51 @@ export const PdfPreviewAndMarkup: React.FC<Props> = ({
     }
     setIsDrawingSig(false);
     setCurrentSigPoints([]);
+  };
+
+  const handleCanvasTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (activeTool === 'none') return;
+    const { x, y } = getNormalizedCoords(e);
+
+    if (activeTool === 'signature') {
+      setIsDrawingSig(true);
+      setCurrentSigPoints([{ x, y }]);
+      return;
+    }
+
+    const newItem: OverlayItem = {
+      id: safeRandomUUID(),
+      page: currentPage,
+      type: activeTool,
+      x,
+      y,
+      width: activeTool === 'mask' || activeTool === 'redact' ? 0.28 : 0.22,
+      height: activeTool === 'mask' || activeTool === 'redact' ? 0.07 : 0.05,
+      text:
+        activeTool === 'text'
+          ? customText
+          : activeTool === 'stamp'
+            ? stampLabel
+            : undefined,
+      color:
+        activeTool === 'stamp'
+          ? '#dc2626'
+          : activeTool === 'text'
+            ? '#0f172a'
+            : undefined,
+    };
+
+    setOverlays((prev) => [...prev, newItem]);
+  };
+
+  const handleCanvasTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isDrawingSig || activeTool !== 'signature') return;
+    const { x, y } = getNormalizedCoords(e);
+    setCurrentSigPoints((prev) => [...prev, { x, y }]);
+  };
+
+  const handleCanvasTouchEnd = () => {
+    handleCanvasMouseUp();
   };
 
   const handleExportMarkupRevision = async () => {
@@ -320,8 +479,19 @@ export const PdfPreviewAndMarkup: React.FC<Props> = ({
           </button>
         </div>
 
-        {/* Bidirectional Conversion Export Buttons */}
+        {/* Bidirectional Conversion Export Buttons & Raw File Download */}
         <div className="flex items-center gap-2">
+          <a
+            href={api.getStreamUrl(document.id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={document.originalFilename}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs text-slate-300 border border-slate-800 flex items-center gap-1.5"
+            title="Download or open original PDF directly"
+          >
+            <ExternalLink className="w-3.5 h-3.5 text-sky-400" />
+            Open / Download PDF
+          </a>
           <button
             type="button"
             onClick={() => handleDownloadImagesZip('png')}
@@ -489,34 +659,59 @@ export const PdfPreviewAndMarkup: React.FC<Props> = ({
         </div>
       )}
 
-      {/* Main Viewport + Fabric/Canvas Overlay */}
+      {/* Main Viewport + Canvas + Interactive Overlay */}
       <div className="p-4 bg-slate-950/60 flex justify-center overflow-auto min-h-[480px]">
         <div
           ref={canvasContainerRef}
           onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleCanvasMouseMove}
           onMouseUp={handleCanvasMouseUp}
+          onTouchStart={handleCanvasTouchStart}
+          onTouchMove={handleCanvasTouchMove}
+          onTouchEnd={handleCanvasTouchEnd}
           style={{
             width: `${Math.round(560 * zoom)}px`,
-            height: `${Math.round(760 * zoom)}px`,
+            height: `${Math.round(560 * zoom * pageAspectRatio)}px`,
+            touchAction: activeTool !== 'none' ? 'none' : 'auto',
           }}
-          className={`relative bg-white shadow-2xl rounded border border-slate-700 overflow-hidden select-none ${
+          className={`relative bg-white shadow-2xl rounded border border-slate-700 overflow-hidden select-none shrink-0 ${
             activeTool !== 'none' ? 'cursor-crosshair' : 'cursor-default'
           }`}
         >
-          {/* Native PDF Preview Layer */}
-          {pdfBlobUrl ? (
-            <iframe
-              title="PDF Preview"
-              src={`${pdfBlobUrl}#page=${currentPage}&toolbar=0&navpanes=0`}
-              className={`w-full h-full border-0 ${
-                activeTool !== 'none' ? 'pointer-events-none' : ''
-              }`}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-slate-400 text-sm">
-              Loading PDF Page {currentPage}...
+          {loadingPdf ? (
+            <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 text-sm gap-2 bg-slate-900">
+              <div className="w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+              <span>Loading Page {currentPage}...</span>
             </div>
+          ) : pdfError ? (
+            <div className="w-full h-full flex flex-col items-center justify-center text-rose-400 text-xs p-4 text-center bg-slate-900">
+              <ShieldAlert className="w-8 h-8 mb-2 opacity-80" />
+              <span>{pdfError}</span>
+            </div>
+          ) : (
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 block w-full h-full pointer-events-none"
+            />
+          )}
+
+          {/* Real-time signature drawing polyline preview */}
+          {isDrawingSig && currentSigPoints.length > 1 && (
+            <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
+              <polyline
+                points={currentSigPoints
+                  .map(
+                    (p) =>
+                      `${p.x * Math.round(560 * zoom)},${p.y * Math.round(560 * zoom * pageAspectRatio)}`
+                  )
+                  .join(' ')}
+                fill="none"
+                stroke="#1d4ed8"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           )}
 
           {/* Interactive Annotation & Redaction Layer */}
