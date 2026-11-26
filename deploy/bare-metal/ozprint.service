@@ -5,25 +5,22 @@ Wants=cups.service
 
 [Service]
 Type=simple
-User=ozprint
-Group=lp
-WorkingDirectory=/opt/ozprint
+User=maverick
+WorkingDirectory=/home/maverick/Ozprint
 Environment="NODE_ENV=production"
 Environment="PORT=4000"
 Environment="STORAGE_ROOT=/var/lib/ozprint"
 Environment="SQLITE_PATH=/var/lib/ozprint/ozprint.db"
 Environment="PYTHON_BINARY=/usr/bin/python3"
 EnvironmentFile=-/etc/ozprint/ozprint.env
-ExecStart=/usr/bin/node /opt/ozprint/apps/server/dist/index.js
+ExecStart=/usr/bin/node /home/maverick/Ozprint/apps/server/dist/index.js
 Restart=on-failure
 RestartSec=5
 
-# TRD 6.2 Systemd Unit Sandboxing
+# Systemd Sandboxing
 NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/ozprint
+ReadWritePaths=/var/lib/ozprint /home/maverick/Ozprint
 
 [Install]
 WantedBy=multi-user.target
