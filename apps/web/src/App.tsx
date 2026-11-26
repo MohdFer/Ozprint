@@ -43,8 +43,7 @@ export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'workspace' | 'queue' | 'kiosk' | 'admin'
   >(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.has('kiosk') ? 'kiosk' : 'workspace';
+    return 'workspace';
   });
 
   const [rightPanelMode, setRightPanelMode] = useState<'print' | 'nup'>('print');
@@ -228,14 +227,6 @@ export const App: React.FC = () => {
     fetchWorkspaceData();
   };
 
-  if (!user && activeTab === 'kiosk') {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
-        <KioskView />
-      </div>
-    );
-  }
-
   if (loadingAuth) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 text-sm">
@@ -248,8 +239,7 @@ export const App: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-7 space-y-6 shadow-2xl">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5">
               <div className="p-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">
                 <Printer className="w-6 h-6" />
               </div>
@@ -260,15 +250,6 @@ export const App: React.FC = () => {
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setActiveTab('kiosk')}
-              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-emerald-300 flex items-center gap-1"
-            >
-              <QrCode className="w-3.5 h-3.5" />
-              Walk-Up Kiosk
-            </button>
-          </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
