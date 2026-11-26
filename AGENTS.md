@@ -27,6 +27,9 @@ When you deploy OzPrint directly on your print server:
 3. OzPrint runs `/usr/bin/lpstat -p -d` and `/usr/bin/lpoptions -p <printer> -l` directly on the server to discover your attached printer and its hardware capabilities (duplex, color, paper sizes).
 4. When you click **Slice & Print**, OzPrint slices the exact requested pages into `tmp/slice_<jobId>.pdf`, spawns `/usr/bin/lp`, tracks physical completion via `/usr/bin/lpstat -W completed -o`, and deletes the temporary slice immediately.
 
+> [!NOTE]
+> **CUPS Driver / PPD Boundary**: OzPrint submits standard PDFs to `/usr/bin/lp` without `-o raw` and delegates printer-language rasterization entirely to CUPS. If a printer prints raw binary headers (e.g., `dsnd` from `rastertoescpr` on an Epson L380 configured with an `ESC/P-R` L385 PPD), the issue is the host CUPS PPD/driver (`printer-driver-gutenprint` or vendor driver mismatch), not `LocalCupsAdapter`. Verify directly with `lp -d <printer> /usr/share/cups/data/testprint` and `/etc/cups/ppd/<printer>.ppd`.
+
 ---
 
 ### 1.3 How the Remote Print Agent Works (Layer 3 Distributed Mode)

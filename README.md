@@ -23,7 +23,8 @@
 5. [Quick Start (Docker & Bare-Metal Linux)](#5-quick-start-docker--bare-metal-linux)
 6. [Local Development & Automated Test Suite](#6-local-development--automated-test-suite)
 7. [Configuration Reference (`.env`)](#7-configuration-reference-env)
-8. [Documentation & Open-Source Guides](#8-documentation--open-source-guides)
+8. [CUPS Printer Drivers & Troubleshooting](#8-cups-printer-drivers--troubleshooting)
+9. [Documentation & Open-Source Guides](#9-documentation--open-source-guides)
 
 ---
 
@@ -287,7 +288,38 @@ Copy [`.env.example`](.env.example) to `.env` to customize your instance:
 
 ---
 
-## 8. Documentation & Open-Source Guides
+## 8. CUPS Printer Drivers & Troubleshooting
+
+OzPrint sends standard PDF slices directly to `/usr/bin/lp` and relies on the host's **CUPS PPD / printer driver** to translate PDFs into printer-specific raster or page-description commands.
+
+### Garbled or Raw Text Output (e.g. `dsnd`, symbols across pages)
+
+If a printer outputs raw binary headers such as `dsnd` or random symbols instead of the document, **CUPS is using an incompatible PPD/driver** for that hardware—not a bug in OzPrint's PDF slicer:
+
+- **Epson Inkjets (e.g., Epson L380 vs. L385)**: Models like the **L385** speak **ESC/P-R** (`printer-driver-escpr` / `rastertoescpr`, which emits `dsnd` packet headers), while USB-only models like the **L380** expect **ESC/P2** or Epson's model-specific driver (`epson-inkjet-printer-201601w`). Assigning an `ESC/P-R` PPD to an `ESC/P2` printer causes the firmware to print the raw raster stream as plain text.
+- **How to diagnose and fix on the print host**:
+  1. Cancel any active queue and power-cycle the printer to clear its buffer:
+     ```bash
+     cancel -a <PRINTER_NAME>
+     ```
+  2. Inspect the active URI and PPD filter:
+     ```bash
+     lpstat -v <PRINTER_NAME>
+     grep -iE "NickName|cupsFilter" /etc/cups/ppd/<PRINTER_NAME>.ppd
+     ```
+  3. Install **Gutenprint** (`sudo apt install printer-driver-gutenprint`) or the vendor's official Linux `.deb` driver, then open CUPS (`http://<server-ip>:631` → **Printers** → **Modify Printer**) and select the matching model PPD (avoid `Generic ESC/P-R` or `Raw` queues).
+  4. Verify with a native CUPS test page before printing from OzPrint:
+     ```bash
+     lp -d <PRINTER_NAME> /usr/share/cups/data/testprint
+     ```
+
+### Plain HTTP on LAN (`crypto.randomUUID is not a function`)
+
+Modern browsers disable `window.crypto.randomUUID()` on non-HTTPS origins other than `localhost`. OzPrint includes `safeRandomUUID()` in `apps/web/src/api/client.ts` with a `crypto.getRandomValues()` fallback so LAN access over plain HTTP (`http://<hostname>:4000`) works out of the box. If you see this error after upgrading, rebuild (`npm run build`), restart the service, and hard-refresh the browser (`Ctrl+Shift+R`).
+
+---
+
+## 9. Documentation & Open-Source Guides
 
 - **[AGENTS.md](AGENTS.md)** — Complete guide to Remote Print Agents (how they work, when to use them vs. direct server printing) + AI Coding Agent repository rules.
 - **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** — Architecture deep-dive, database schema, N-Up layout math, state machine internals, and testing guide.
