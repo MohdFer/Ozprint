@@ -21,10 +21,16 @@ export interface AppConfig {
 }
 
 export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
-  const storageRoot =
-    overrides.storageRoot ||
-    process.env.STORAGE_ROOT ||
-    path.resolve(process.cwd(), 'storage');
+  const defaultStorageRoot =
+    process.env.NODE_ENV === 'production' && process.platform !== 'win32'
+      ? '/var/lib/ozprint'
+      : path.resolve(process.cwd(), 'storage');
+
+  const rawStorageRoot =
+    overrides.storageRoot || process.env.STORAGE_ROOT || defaultStorageRoot;
+  const storageRoot = path.isAbsolute(rawStorageRoot)
+    ? rawStorageRoot
+    : path.resolve(process.cwd(), rawStorageRoot);
 
   return {
     port: Number(process.env.PORT || 4000),

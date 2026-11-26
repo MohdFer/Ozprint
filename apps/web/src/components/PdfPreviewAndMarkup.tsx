@@ -14,7 +14,7 @@ import {
   Image as ImageIcon,
   History,
 } from 'lucide-react';
-import { api, DocumentItem } from '../api/client';
+import { api, DocumentItem, safeRandomUUID } from '../api/client';
 
 interface OverlayItem {
   id: string;
@@ -114,7 +114,7 @@ export const PdfPreviewAndMarkup: React.FC<Props> = ({
     }
 
     const newItem: OverlayItem = {
-      id: crypto.randomUUID(),
+      id: safeRandomUUID(),
       page: currentPage,
       type: activeTool,
       x,
@@ -149,7 +149,7 @@ export const PdfPreviewAndMarkup: React.FC<Props> = ({
       setOverlays((prev) => [
         ...prev,
         {
-          id: crypto.randomUUID(),
+          id: safeRandomUUID(),
           page: currentPage,
           type: 'signature',
           x: currentSigPoints[0].x,

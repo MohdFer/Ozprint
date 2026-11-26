@@ -56,6 +56,11 @@ if [[ ! -f /etc/ozprint/ozprint.env ]]; then
   chown root:lp /etc/ozprint/ozprint.env
 fi
 
+# Ensure production paths match systemd ReadWritePaths sandbox
+sed -i "s|^STORAGE_ROOT=.*|STORAGE_ROOT=/var/lib/ozprint|" /etc/ozprint/ozprint.env
+sed -i "s|^SQLITE_PATH=.*|SQLITE_PATH=/var/lib/ozprint/ozprint.db|" /etc/ozprint/ozprint.env
+sed -i "s|^NODE_ENV=.*|NODE_ENV=production|" /etc/ozprint/ozprint.env
+
 echo "==> [6/6] Enabling and starting systemd unit ozprint.service..."
 cp /opt/ozprint/deploy/bare-metal/ozprint.service /etc/systemd/system/ozprint.service
 systemctl daemon-reload

@@ -7,7 +7,7 @@ import {
   CheckCircle2,
   AlertTriangle,
 } from 'lucide-react';
-import { api, DocumentItem, PrinterItem } from '../api/client';
+import { api, DocumentItem, PrinterItem, safeRandomUUID } from '../api/client';
 
 interface Props {
   document: DocumentItem;
@@ -166,7 +166,7 @@ export const PageSlicerAndPrintPanel: React.FC<Props> = ({
     setSubmitting(true);
     setStatusMessage(null);
     try {
-      const idempotencyKey = crypto.randomUUID();
+      const idempotencyKey = safeRandomUUID();
       const res = await api.request('/print-jobs', {
         method: 'POST',
         body: JSON.stringify({
