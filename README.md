@@ -1,12 +1,20 @@
 # OzPrint
 
-**Open-Source Self-Hosted Document Management & Print Orchestration Platform**
+### Print from anywhere in the world to your own self-hosted printer.
+**A private, zero-subscription alternative to Google Cloud Print with browser PDF prep, granular page slicing, and zero port-forwarding.**
 
 [![Version](https://img.shields.io/badge/version-3.0.0-16a34a.svg)](package.json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933.svg)](package.json)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab.svg)](workers/pdf_worker.py)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+> [!TIP]
+> **Why OzPrint?**
+> - 🌍 **Print From Anywhere**: Hit **Print** from your smartphone, laptop, or ERP across town or across the globe.
+> - 🛡️ **Zero Port Forwarding**: Never expose your home router to internet scans or struggle with ISP CGNAT. Connect securely via **Cloudflare Tunnel**, **Tailscale**, or outbound WebSockets.
+> - 🔒 **100% Private & Self-Hosted**: Your documents never touch third-party cloud print vendors (HP Smart, Epson Connect, Canon Cloud). Files are stored opaquely and automatically shredded after printing.
+> - ✂️ **Smart Browser PDF Prep**: Custom page slicing, live physical sheet counters, manual duplex reversing, N-Up multi-page layouts, digital signatures, stamps, and 300 DPI true redaction before spooling a single sheet of paper.
 
 **OzPrint** is a self-hosted, open-source web platform that unifies opaque document storage, interactive PDF.js previewing, granular page slicing (`range`, `odd/even`, `reverse` manual duplexing), multi-page-per-sheet (**N-Up**) layout conversion, non-destructive Fabric.js markup, isolated rasterized true redaction, format conversions (`PDF ↔ Images`), and physical print orchestration inside a single deployable modular monolith.
 
@@ -18,13 +26,14 @@
 
 1. [Visual Usage Tutorial & Step-by-Step Guide](#1-visual-usage-tutorial--step-by-step-guide)
 2. [Deployment Topologies: Direct Server vs. Remote Agent](#2-deployment-topologies-direct-server-vs-remote-agent)
-3. [System Architecture](#3-system-architecture)
-4. [Feature Overview (Three-Layer Architecture)](#4-feature-overview-three-layer-architecture)
-5. [Quick Start (Docker & Bare-Metal Linux)](#5-quick-start-docker--bare-metal-linux)
-6. [Local Development & Automated Test Suite](#6-local-development--automated-test-suite)
-7. [Configuration Reference (`.env`)](#7-configuration-reference-env)
-8. [CUPS Printer Drivers & Troubleshooting](#8-cups-printer-drivers--troubleshooting)
-9. [Documentation & Open-Source Guides](#9-documentation--open-source-guides)
+3. [Remote Access Guide: Cloudflare Tunnel & Tailscale (Zero Port Forwarding)](#3-remote-access-guide-cloudflare-tunnel--tailscale-zero-port-forwarding)
+4. [System Architecture](#4-system-architecture)
+5. [Feature Overview (Three-Layer Architecture)](#5-feature-overview-three-layer-architecture)
+6. [Quick Start (Docker & Bare-Metal Linux)](#6-quick-start-docker--bare-metal-linux)
+7. [Local Development & Automated Test Suite](#7-local-development--automated-test-suite)
+8. [Configuration Reference (`.env`)](#8-configuration-reference-env)
+9. [CUPS Printer Drivers & Troubleshooting](#9-cups-printer-drivers--troubleshooting)
+10. [Documentation & Open-Source Guides](#10-documentation--open-source-guides)
 
 ---
 
@@ -126,7 +135,66 @@ If OzPrint is hosted on a **Cloud VPS** (outside your local network) or in **Off
 
 ---
 
-## 3. System Architecture
+## 3. Remote Access Guide: Cloudflare Tunnel & Tailscale (Zero Port Forwarding)
+
+You can print to your attached home or office printer from anywhere in the world without opening ports on your Wi-Fi router or exposing your home IP address:
+
+### Method A: Cloudflare Tunnel (Recommended — Custom HTTPS Domain)
+
+Cloudflare Tunnel creates an **outbound encrypted tunnel** between your OzPrint server and Cloudflare's edge network. You can access `https://print.yourdomain.com` from any smartphone or browser with **zero router port forwarding**.
+
+#### Option 1: Via the Cloudflare Zero Trust Web Dashboard (Fastest, No CLI)
+1. Go to the [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/) → **Networks** → **Tunnels**.
+2. Click **Create a Tunnel**, choose **Cloudflared**, and name it `ozprint`.
+3. Copy the installation command for Linux and run it on your OzPrint host (e.g. `topgun`).
+4. In the **Public Hostname** tab:
+   - **Subdomain**: `print`
+   - **Domain**: `yourdomain.com`
+   - **Type**: `HTTP`
+   - **URL**: `localhost:4000`
+5. Click **Save Tunnel**. Open `https://print.yourdomain.com` on your phone to print immediately!
+
+#### Option 2: Via Linux Terminal (`cloudflared` CLI)
+```bash
+# 1. Install cloudflared
+curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared.deb
+
+# 2. Login to your Cloudflare account
+cloudflared tunnel login
+
+# 3. Create the tunnel
+cloudflared tunnel create ozprint
+
+# 4. Route your domain (e.g., print.yourdomain.com) to the tunnel
+cloudflared tunnel route dns ozprint print.yourdomain.com
+
+# 5. Run the tunnel pointing to OzPrint's port 4000
+cloudflared tunnel run --url http://localhost:4000 ozprint
+```
+
+---
+
+### Method B: Tailscale (Private Encrypted Mesh Network)
+
+If you prefer a private peer-to-peer network without pointing a public domain:
+
+1. **Install Tailscale on your OzPrint server**:
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh
+   sudo tailscale up
+   ```
+2. **Install Tailscale on your phone or laptop** from the App Store / Google Play / website and log into the same Tailscale account.
+3. Access OzPrint directly at `http://<tailscale-ip>:4000` or `http://topgun:4000` from any cellular connection or external Wi-Fi.
+4. *(Optional) Enable HTTPS via Tailscale Serve*:
+   ```bash
+   sudo tailscale serve --bg https / http://localhost:4000
+   ```
+   Now you can access OzPrint securely at `https://topgun.your-tailnet.ts.net`.
+
+---
+
+## 4. System Architecture
 
 ```mermaid
 flowchart TD
@@ -172,7 +240,7 @@ flowchart TD
 
 ---
 
-## 4. Feature Overview (Three-Layer Architecture)
+## 5. Feature Overview (Three-Layer Architecture)
 
 ### Layer 1 — Core Printing Engine
 - **Opaque UUIDv4 Storage & Magic-Byte Validation**: Verifies file headers (`%PDF-`, `PNG`, `JPEG`) via raw magic-byte inspection, computes SHA-256 checksums, stores files under non-guessable keys (`objects/YYYY/MM/<uuid>.pdf`), and supports 1-click permanent deletion from disk and database.
@@ -204,7 +272,7 @@ flowchart TD
 
 ---
 
-## 5. Quick Start (Docker & Bare-Metal Linux)
+## 6. Quick Start (Docker & Bare-Metal Linux)
 
 ### Option A: Official Docker Compose (Recommended)
 
@@ -234,7 +302,7 @@ This script provisions a least-privilege `ozprint` system account in the `lp` gr
 
 ---
 
-## 6. Local Development & Automated Test Suite
+## 7. Local Development & Automated Test Suite
 
 ### Prerequisites
 - **Node.js** 20 LTS or newer (`npm` 10+)
@@ -266,7 +334,7 @@ npm run dev:web
 
 ---
 
-## 7. Configuration Reference (`.env`)
+## 8. Configuration Reference (`.env`)
 
 Copy [`.env.example`](.env.example) to `.env` to customize your instance:
 
@@ -288,7 +356,7 @@ Copy [`.env.example`](.env.example) to `.env` to customize your instance:
 
 ---
 
-## 8. CUPS Printer Drivers & Troubleshooting
+## 9. CUPS Printer Drivers & Troubleshooting
 
 OzPrint sends standard PDF slices directly to `/usr/bin/lp` and relies on the host's **CUPS PPD / printer driver** to translate PDFs into printer-specific raster or page-description commands.
 
@@ -319,7 +387,7 @@ Modern browsers disable `window.crypto.randomUUID()` on non-HTTPS origins other 
 
 ---
 
-## 9. Documentation & Open-Source Guides
+## 10. Documentation & Open-Source Guides
 
 - **[AGENTS.md](AGENTS.md)** — Complete guide to Remote Print Agents (how they work, when to use them vs. direct server printing) + AI Coding Agent repository rules.
 - **[docs/DEVELOPER_GUIDE.md](docs/DEVELOPER_GUIDE.md)** — Architecture deep-dive, database schema, N-Up layout math, state machine internals, and testing guide.
