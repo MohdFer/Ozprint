@@ -16,6 +16,7 @@ import {
   FileImage,
   Trash2,
   LayoutGrid,
+  Settings,
 } from 'lucide-react';
 import {
   api,
@@ -29,13 +30,15 @@ import { NupLayoutPanel } from './components/NupLayoutPanel';
 import { PdfPreviewAndMarkup } from './components/PdfPreviewAndMarkup';
 import { KioskView } from './components/KioskView';
 import { AdminDashboard } from './components/AdminDashboard';
+import { SettingsModal } from './components/SettingsModal';
 
 export const App: React.FC = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loadingAuth, setLoadingAuth] = useState<boolean>(true);
-  const [username, setUsername] = useState<string>('admin');
-  const [password, setPassword] = useState<string>('ozprint-admin');
+  const [username, setUsername] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
   const [loginError, setLoginError] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<
     'workspace' | 'queue' | 'kiosk' | 'admin'
@@ -276,7 +279,9 @@ export const App: React.FC = () => {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                placeholder="Enter username or email"
+                autoComplete="username"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
               />
             </div>
             <div>
@@ -287,7 +292,9 @@ export const App: React.FC = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-emerald-500 focus:outline-none"
+                placeholder="Enter password"
+                autoComplete="current-password"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
               />
             </div>
 
@@ -409,6 +416,15 @@ export const App: React.FC = () => {
               {user.role}
             </span>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1.5 font-medium"
+            title="Account & Security Settings"
+          >
+            <Settings className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Settings</span>
+          </button>
           <button
             type="button"
             onClick={handleLogout}
@@ -791,6 +807,16 @@ export const App: React.FC = () => {
           />
         )}
       </main>
+
+      {/* Settings Modal */}
+      {showSettings && user && (
+        <SettingsModal
+          user={user}
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          onOpenAdmin={() => setActiveTab('admin')}
+        />
+      )}
     </div>
   );
 };

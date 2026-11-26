@@ -203,4 +203,59 @@ describe('TRD Section 6 & 7 — Security, Sandbox & Fuzzing Tests', () => {
       oz.db.prepare('DELETE FROM audit_logs').run();
     }).toThrow(/AUDIT_LOGS_IMMUTABLE/);
   });
+
+  it('allows authenticated users to change password and admin to reset password', async () => {
+    // 1. Alice fails to change password with wrong current password
+    const failChange = await request(oz.app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${userAToken}`)
+      .send({
+        currentPassword: 'wrong-password',
+        newPassword: 'alice-new-password',
+      });
+    expect(failChange.status).toBe(400);
+    expect(failChange.body.error).toBe('INVALID_CURRENT_PASSWORD');
+
+    // 2. Alice successfully changes password
+    const successChange = await request(oz.app)
+      .post('/api/auth/change-password')
+      .set('Authorization', `Bearer ${userAToken}`)
+      .send({
+        currentPassword: 'alice-password',
+        newPassword: 'alice-new-password',
+      });
+    expect(successChange.status).toBe(200);
+    expect(successChange.body.ok).toBe(true);
+
+    // Verify Alice can login with new password and cannot login with old
+    const oldLogin = await request(oz.app).post('/api/auth/login').send({
+      username: 'alice',
+      password: 'alice-password',
+    });
+    expect(oldLogin.status).toBe(401);
+
+    const newLogin = await request(oz.app).post('/api/auth/login').send({
+      username: 'alice',
+      password: 'alice-new-password',
+    });
+    expect(newLogin.status).toBe(200);
+
+    // 3. Admin resets Bob's password via PATCH /api/users/:userId
+    const bobRow = oz.db.prepare('SELECT id FROM users WHERE username = ?').get('bob') as any;
+    expect(bobRow).toBeDefined();
+
+    const adminReset = await request(oz.app)
+      .patch(`/api/users/${bobRow.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        password: 'bob-admin-reset-pw',
+      });
+    expect(adminReset.status).toBe(200);
+
+    const bobNewLogin = await request(oz.app).post('/api/auth/login').send({
+      username: 'bob',
+      password: 'bob-admin-reset-pw',
+    });
+    expect(bobNewLogin.status).toBe(200);
+  });
 });

@@ -154,6 +154,57 @@ export function createApiRouter(deps: ApiRouterDeps): Router {
     return res.json({ user: req.user });
   });
 
+  router.post(
+    '/auth/change-password',
+    requireAuth,
+    (req: Request, res: Response) => {
+      const { currentPassword, newPassword } = req.body || {};
+      if (!currentPassword || !newPassword) {
+        return res.status(400).json({
+          error: 'MISSING_FIELDS',
+          message: 'Current password and new password are required',
+        });
+      }
+
+      if (typeof newPassword !== 'string' || newPassword.length < 6) {
+        return res.status(400).json({
+          error: 'INVALID_PASSWORD_LENGTH',
+          message: 'New password must be at least 6 characters long',
+        });
+      }
+
+      const userRow = db
+        .prepare<any>('SELECT password_hash FROM users WHERE id = ?')
+        .get(req.user!.id);
+
+      if (
+        !userRow ||
+        !verifyPassword(String(currentPassword), userRow.password_hash)
+      ) {
+        return res.status(400).json({
+          error: 'INVALID_CURRENT_PASSWORD',
+          message: 'Current password is incorrect',
+        });
+      }
+
+      const newHash = hashPassword(String(newPassword));
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(
+        newHash,
+        req.user!.id
+      );
+
+      auditService.log({
+        actorUserId: req.user!.id,
+        action: 'USER_PASSWORD_CHANGED',
+        targetType: 'USER',
+        targetId: req.user!.id,
+        ipAddress: req.ip,
+      });
+
+      return res.json({ ok: true, message: 'Password changed successfully' });
+    }
+  );
+
   // =========================================================================
   // 2. DIAGNOSTICS & DEPENDENCY HEALTH (Admin)
   // =========================================================================
@@ -297,7 +348,7 @@ export function createApiRouter(deps: ApiRouterDeps): Router {
     requireRole(['ADMIN']),
     (req: Request, res: Response) => {
       const { userId } = req.params;
-      const { monthlyPageQuota, resetQuotaUsed, isActive, role } =
+      const { monthlyPageQuota, resetQuotaUsed, isActive, role, password } =
         req.body || {};
 
       const existing = db
@@ -319,18 +370,37 @@ export function createApiRouter(deps: ApiRouterDeps): Router {
       const nextRole =
         role && ['ADMIN', 'MEMBER'].includes(role) ? role : existing.role;
 
+      let nextPasswordHash = existing.password_hash;
+      let passwordChanged = false;
+      if (password !== undefined && password !== null) {
+        if (typeof password !== 'string' || password.length < 6) {
+          return res.status(400).json({
+            error: 'INVALID_PASSWORD_LENGTH',
+            message: 'Password must be at least 6 characters long',
+          });
+        }
+        nextPasswordHash = hashPassword(String(password));
+        passwordChanged = true;
+      }
+
       db.prepare(
         `UPDATE users
-         SET monthly_page_quota = ?, pages_used_current_period = ?, is_active = ?, role = ?
+         SET monthly_page_quota = ?, pages_used_current_period = ?, is_active = ?, role = ?, password_hash = ?
          WHERE id = ?`
-      ).run(nextQuota, nextUsed, nextActive, nextRole, userId);
+      ).run(nextQuota, nextUsed, nextActive, nextRole, nextPasswordHash, userId);
 
       auditService.log({
         actorUserId: req.user!.id,
-        action: 'USER_UPDATED',
+        action: passwordChanged ? 'USER_PASSWORD_RESET' : 'USER_UPDATED',
         targetType: 'USER',
         targetId: userId,
-        details: { monthlyPageQuota: nextQuota, resetQuotaUsed, isActive: nextActive, role: nextRole },
+        details: {
+          monthlyPageQuota: nextQuota,
+          resetQuotaUsed,
+          isActive: nextActive,
+          role: nextRole,
+          passwordReset: passwordChanged,
+        },
         ipAddress: req.ip,
       });
 

@@ -9,6 +9,10 @@ import {
   Activity,
   KeyRound,
   Trash2,
+  Lock,
+  X,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { api, PrinterItem } from '../api/client';
 
@@ -32,6 +36,13 @@ export const AdminDashboard: React.FC<Props> = ({
   const [newPassword, setNewPassword] = useState<string>('');
   const [newQuota, setNewQuota] = useState<number>(500);
   const [discovering, setDiscovering] = useState<boolean>(false);
+
+  const [passwordResetUser, setPasswordResetUser] = useState<any | null>(null);
+  const [adminNewPassword, setAdminNewPassword] = useState<string>('');
+  const [adminConfirmPassword, setAdminConfirmPassword] = useState<string>('');
+  const [passwordResetError, setPasswordResetError] = useState<string | null>(null);
+  const [passwordResetSuccess, setPasswordResetSuccess] = useState<string | null>(null);
+  const [passwordResetLoading, setPasswordResetLoading] = useState<boolean>(false);
 
   const loadAdminData = async () => {
     try {
@@ -110,6 +121,46 @@ export const AdminDashboard: React.FC<Props> = ({
       body: JSON.stringify({ resetQuotaUsed: true }),
     });
     loadAdminData();
+  };
+
+  const handleAdminResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordResetError(null);
+    setPasswordResetSuccess(null);
+
+    if (!adminNewPassword) {
+      setPasswordResetError('Please enter a new password');
+      return;
+    }
+    if (adminNewPassword.length < 6) {
+      setPasswordResetError('Password must be at least 6 characters');
+      return;
+    }
+    if (adminNewPassword !== adminConfirmPassword) {
+      setPasswordResetError('Passwords do not match');
+      return;
+    }
+
+    setPasswordResetLoading(true);
+    try {
+      await api.request(`/users/${passwordResetUser.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ password: adminNewPassword }),
+      });
+      setPasswordResetSuccess(
+        `Password updated successfully for ${passwordResetUser.username}!`
+      );
+      setAdminNewPassword('');
+      setAdminConfirmPassword('');
+      setTimeout(() => {
+        setPasswordResetUser(null);
+        setPasswordResetSuccess(null);
+      }, 1500);
+    } catch (err: any) {
+      setPasswordResetError(err?.message || 'Failed to update password');
+    } finally {
+      setPasswordResetLoading(false);
+    }
   };
 
   return (
@@ -364,13 +415,31 @@ export const AdminDashboard: React.FC<Props> = ({
                     {u.pagesUsedCurrentPeriod} / {u.monthlyPageQuota} sheets
                   </td>
                   <td className="py-2.5 text-right">
-                    <button
-                      type="button"
-                      onClick={() => handleResetUserQuota(u.id)}
-                      className="text-emerald-400 hover:underline"
-                    >
-                      Reset Used Quota
-                    </button>
+                    <div className="flex items-center justify-end gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPasswordResetUser(u);
+                          setAdminNewPassword('');
+                          setAdminConfirmPassword('');
+                          setPasswordResetError(null);
+                          setPasswordResetSuccess(null);
+                        }}
+                        className="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1 font-medium"
+                        title={`Reset password for ${u.username}`}
+                      >
+                        <KeyRound className="w-3.5 h-3.5" />
+                        <span>Change Password</span>
+                      </button>
+                      <span className="text-slate-700">|</span>
+                      <button
+                        type="button"
+                        onClick={() => handleResetUserQuota(u.id)}
+                        className="text-emerald-400 hover:text-emerald-300 hover:underline"
+                      >
+                        Reset Used Quota
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -409,6 +478,104 @@ export const AdminDashboard: React.FC<Props> = ({
           ))}
         </div>
       </div>
+
+      {/* Admin User Password Reset Modal */}
+      {passwordResetUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div
+            className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white">
+                    Reset Password
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    User: <strong className="text-white">{passwordResetUser.username}</strong> ({passwordResetUser.role})
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPasswordResetUser(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminResetPassword} className="p-6 space-y-4">
+              {passwordResetError && (
+                <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-xs text-rose-300 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                  <span>{passwordResetError}</span>
+                </div>
+              )}
+
+              {passwordResetSuccess && (
+                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300 flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+                  <span>{passwordResetSuccess}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={adminNewPassword}
+                  onChange={(e) => setAdminNewPassword(e.target.value)}
+                  placeholder="Minimum 6 characters"
+                  autoComplete="new-password"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={adminConfirmPassword}
+                  onChange={(e) => setAdminConfirmPassword(e.target.value)}
+                  placeholder="Re-enter new password"
+                  autoComplete="new-password"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setPasswordResetUser(null)}
+                  className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordResetLoading}
+                  className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-xs font-semibold text-white transition flex items-center gap-1.5"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>
+                    {passwordResetLoading ? 'Updating...' : 'Set Password'}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
